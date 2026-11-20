@@ -6,6 +6,7 @@ import { TIPOS } from '../lib/util.js'
 import { CENTRO, MAPAS_BASE } from '../lib/mapas.js'
 import { masaPorId } from '../lib/catalogo.js'
 import CapaMasas from './CapaMasas.jsx'
+import CapaZonas from './CapaZonas.jsx'
 import { suavizarAnillo, suavizarLinea, TRAZO_SUAVE } from '../lib/suavizar.js'
 import { dentro, recortarAnillo, recortarLinea } from '../lib/recorte.js'
 import { anilloNivel, lineaNivel, nivelDe } from '../lib/lod.js'
@@ -289,7 +290,7 @@ function FotosEspecie({ especie, conEspecie, geo, region, setSeleccion }) {
 // Pin de la localidad buscada
 const ICONO_LUGAR = L.divIcon({ className: '', html: '<span class="pin-lugar"></span>', iconSize: [26, 34], iconAnchor: [13, 32] })
 
-export default function MapView({ geo, filtrados, conEspecie, region, listaCcaa = [], seleccion, setSeleccion, vuelo, especie, base, setMapa, general, teselas, listo, lugar, quitarLugar }) {
+export default function MapView({ geo, filtrados, conEspecie, region, listaCcaa = [], seleccion, setSeleccion, vuelo, especie, base, setMapa, general, teselas, listo, lugar, quitarLugar, zonas }) {
   const [nivel, setNivel] = useState(() => nivelDe(window.innerWidth < 700 ? 5 : 6))
   const [vista, setVista] = useState(null)
   // geometría de las masas revisadas para el nivel de detalle actual
@@ -472,6 +473,7 @@ export default function MapView({ geo, filtrados, conEspecie, region, listaCcaa 
         <Enfocar vuelo={vuelo} geo={geo} region={region} />
         <EnfocarEspecie especie={especie} conEspecie={conEspecie} geo={geo} region={region} />
         <FotosEspecie especie={especie} conEspecie={conEspecie} geo={geo} region={region} setSeleccion={setSeleccion} />
+        {zonas && <CapaZonas tipos={zonas.tipos} idx={zonas.idx} resaltadas={zonas.resaltadas} seleccionada={zonas.seleccionada} onEstado={zonas.onEstado} onZona={zonas.onZona} />}
         <CapaMasas general={general} teselas={teselas} filtrados={filtrados} conEspecie={conEspecie} region={region} seleccion={seleccion} setSeleccion={setSeleccion} listo={listo} />
       </MapContainer>
     </div>
