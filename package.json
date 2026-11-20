@@ -14,7 +14,8 @@
     "datos": "node --max-old-space-size=6144 scripts/descargar-masas.mjs",
     "datos:arroyos": "node --max-old-space-size=8192 scripts/descargar-masas.mjs --arroyos",
     "datos:construir": "node --max-old-space-size=8192 scripts/descargar-masas.mjs --solo-construir",
-    "cebos": "node scripts/descargar-cebos.mjs"
+    "cebos": "node scripts/descargar-cebos.mjs",
+    "zonas": "node scripts/descargar-zonas.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

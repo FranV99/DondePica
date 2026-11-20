@@ -106,6 +106,7 @@ let geoRevisadas = {}
 export function setGeoRevisadas(geo) {
   geoRevisadas = geo || {}
   cacheRegion.clear()
+  cacheCaja.clear()
 }
 function lineasGeo(g) {
   if (!g) return null
@@ -115,6 +116,30 @@ function lineasGeo(g) {
   if (g.type === 'MultiPolygon') return g.coordinates.map((p) => p[0])
   return null
 }
+/** Recuadro [oeste, sur, este, norte] de una masa (índice, trazado o, si no, su punto) */
+const cacheCaja = new Map()
+export function cajaMasa(m) {
+  if (!m) return null
+  if (m.bbox) return m.bbox
+  if (!cacheCaja.has(m.id)) {
+    const lineas = lineasGeo(geoRevisadas[m.id])
+    let caja = null
+    if (lineas) {
+      caja = [Infinity, Infinity, -Infinity, -Infinity]
+      for (const l of lineas)
+        for (const [x, y] of l) {
+          if (x < caja[0]) caja[0] = x
+          if (y < caja[1]) caja[1] = y
+          if (x > caja[2]) caja[2] = x
+          if (y > caja[3]) caja[3] = y
+        }
+    } else if (m.punto) caja = [m.punto[1] - 0.05, m.punto[0] - 0.05, m.punto[1] + 0.05, m.punto[0] + 0.05]
+    if (lineas || caja) cacheCaja.set(m.id, caja)
+    return caja
+  }
+  return cacheCaja.get(m.id)
+}
+
 const cacheRegion = new Map()
 /** Comunidades por las que pasa una masa de agua (lista de códigos) */
 export function regionesDeMasa(m, regiones) {

@@ -9,6 +9,7 @@ import { IcoAbajo, IcoCerrar, IcoPin, IcoReiniciar, IcoTipo } from './Iconos.jsx
 import { svgInsignia } from '../lib/iconosMapa.js'
 import Plegable from './Plegable.jsx'
 import { CALENDARIO, TECNICAS } from '../data/tecnicas.js'
+import { CATEGORIAS_ZONA, COLOR_ZONA, ORDEN_ZONA } from '../lib/zonas.js'
 
 function ItemMasa({ m, seleccion, setSeleccion }) {
   const n = especiesDeMasa(m).especies.length
@@ -494,6 +495,92 @@ const LEYENDA_TIPOS = [
   ['rio', 'Río (punto de referencia de las masas revisadas)'],
 ]
 
+const AVISOS_ZONAS = {
+  cargando: 'Cargando zonas…',
+  lejos: 'Acércate en el mapa para ver las zonas.',
+  fuera: 'En esta parte del mapa no hay zonas con datos abiertos.',
+}
+
+/** Pestaña de zonas de pesca: qué tipos se ven en el mapa (selección múltiple) */
+function TabZonas({ zonasTipos, setZonasTipos, zonasIdx, estadoZonas, listaCcaa = [] }) {
+  const cuenta = useMemo(() => {
+    const c = { r: 0, l: 0, c: 0 }
+    for (const z of zonasIdx?.zonas || []) if (z.cat in c) c[z.cat]++
+    return c
+  }, [zonasIdx])
+  const alternar = (k) => {
+    const n = new Set(zonasTipos)
+    if (n.has(k)) n.delete(k)
+    else n.add(k)
+    setZonasTipos(n)
+  }
+  const fuentes = Object.entries(zonasIdx?.fuentes || {})
+  const sinDatos = listaCcaa.filter((c) => !zonasIdx?.fuentes?.[c.codigo])
+  const todas = zonasTipos.size === ORDEN_ZONA.length
+
+  return (
+    <div className="tab-zonas">
+      <p className="panel-intro">
+        Tramos con normas propias según la orden de pesca de cada comunidad. Elige qué tipos de zona quieres ver en el mapa:
+        puedes marcar varios.
+      </p>
+      <div className="tz-cab">
+        <span className="panel-etiqueta">Tipos de zona</span>
+        <button className="tz-todas" onClick={() => setZonasTipos(new Set(todas ? [] : ORDEN_ZONA))} disabled={zonasIdx === null}>
+          {todas ? 'Ocultar todas' : 'Ver todas'}
+        </button>
+      </div>
+      <div className="tz-tipos" role="group" aria-label="Tipos de zona de pesca">
+        {ORDEN_ZONA.map((k) => {
+          const on = zonasTipos.has(k)
+          return (
+            <button key={k} className={`tz-tipo ${on ? 'on' : ''}`} style={{ '--c': COLOR_ZONA[k] }} aria-pressed={on} onClick={() => alternar(k)} disabled={zonasIdx === null}>
+              <span className="tz-check" aria-hidden />
+              <span className={`lz-muestra lz-${k}`} style={{ '--c': COLOR_ZONA[k] }} />
+              <span className="tz-txt">
+                <b>{CATEGORIAS_ZONA[k].nombre}</b>
+                <small>{CATEGORIAS_ZONA[k].desc}</small>
+              </span>
+              {zonasIdx && <span className="tz-num">{cuenta[k].toLocaleString('es-ES')}</span>}
+            </button>
+          )
+        })}
+      </div>
+
+      {estadoZonas === 'sin-datos' && (
+        <p className="tz-aviso">
+          Aún no hay zonas descargadas. Ejecuta <code>npm run zonas</code> para generarlas.
+        </p>
+      )}
+      {zonasTipos.size > 0 && AVISOS_ZONAS[estadoZonas] && <p className="tz-aviso">{AVISOS_ZONAS[estadoZonas]}</p>}
+
+      {fuentes.length > 0 && (
+        <>
+          <span className="panel-etiqueta">Comunidades con datos abiertos</span>
+          <ul className="tz-fuentes">
+            {fuentes.map(([cc, f]) => (
+              <li key={cc}>
+                <b>{f.nombre}</b>
+                <small>
+                  {f.organismo}
+                  {f.fecha && ` · ${new Date(f.fecha).toLocaleDateString('es-ES')}`}
+                </small>
+                {f.web && (
+                  <a href={f.web} target="_blank" rel="noreferrer">
+                    Fuente ↗
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+          {sinDatos.length > 0 && <p className="tz-nota">Sin datos abiertos todavía: {sinDatos.map((c) => c.nombre).join(', ')}.</p>}
+        </>
+      )}
+      <p className="tz-nota">Información orientativa. Antes de pescar, consulta siempre la orden de vedas vigente.</p>
+    </div>
+  )
+}
+
 function TabLeyenda() {
   return (
     <div className="leyenda-panel">
@@ -546,6 +633,7 @@ export default function PanelLateral(props) {
         {[
           ['masas', 'Masas de agua'],
           ['especies', 'Especies'],
+          ['zonas', 'Zonas'],
           ['leyenda', 'Leyenda'],
         ].map(([k, l]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
@@ -556,7 +644,7 @@ export default function PanelLateral(props) {
           <IcoCerrar width={16} height={16} />
         </button>
       </div>
-      {tab !== 'leyenda' && (
+      {(tab === 'masas' || tab === 'especies') && (
         <div className="panel-reinicio">
           <button onClick={props.restablecer} disabled={tab === 'masas' && !props.hayFiltros} title="Quita la comunidad, los tipos, el texto y la especie elegidos">
             <IcoReiniciar width={15} height={15} /> Restablecer filtros
@@ -566,6 +654,7 @@ export default function PanelLateral(props) {
       <div className="panel-cuerpo">
         {tab === 'masas' && <TabMasas key={props.reinicio} {...props} />}
         {tab === 'especies' && <TabEspecies key={props.reinicio} {...props} />}
+        {tab === 'zonas' && <TabZonas {...props} />}
         {tab === 'leyenda' && <TabLeyenda />}
       </div>
     </aside>

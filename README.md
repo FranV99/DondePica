@@ -18,6 +18,8 @@ Hecho con **Vite + React + Leaflet**. Código con licencia **MIT** y datos con l
 - 🎣 **Aprender a pescarlas**: modalidades, caña, carrete, línea, cebos y señuelos con fotos, mejor
   época, horas y tiempo.
 - 📜 **Consultar la normativa** de las 15 comunidades autónomas peninsulares.
+- 🚦 **Ver las zonas de pesca**: refugios (pesca prohibida), tramos libres o sin muerte y zonas
+  controladas o cotos, en el mapa y en la ficha de cada masa de agua.
 - 🤝 **Contribuir** desde la propia aplicación: el botón *Contribuir* abre un issue de GitHub ya
   rellenado, o te deja enviarlo por correo o copiar el texto.
 
@@ -60,6 +62,31 @@ Si se corta, vuelve a ejecutar el mismo comando y continúa donde lo dejó. Las 
 masas se **estiman automáticamente** (`src/lib/reglas.js`) según la cuenca, el río, la altitud y el
 tipo de masa de agua.
 
+## Zonas de pesca
+
+Los refugios, tramos libres o sin muerte y zonas controladas (cotos, cupos, permisos) se descargan
+de los servicios de datos abiertos de cada comunidad autónoma y se normalizan a tres categorías:
+
+```bash
+npm run zonas            # todas las comunidades con datos abiertos
+npm run zonas -- CT MD   # solo algunas (las demás se conservan)
+```
+
+Se guardan en `public/data/zonas/` (`indice.json` con las normas de cada zona y un archivo con el
+trazado de cada comunidad, que solo se descarga al verla en el mapa). Ahora mismo hay datos de:
+
+| Comunidad | Servicio | Refugios | Libres / sin muerte | Controladas |
+| --- | --- | --- | --- | --- |
+| Cataluña | WFS del visor de pesca de la Generalitat | Refugios y reservas genéticas de trucha | Zonas libres sin muerte | Zonas de pesca controlada |
+| Castilla y León | IDECyL · *Pesca CyL: tramos de pesca* | Refugios | Acceso libre y régimen especial | Cotos, escenarios deportivo-sociales y extracción controlada |
+| Aragón | IDEAragon · *Pesca: clasificación de ríos* | Vedados | Captura y suelta, libre extractivo, aguas ciprinícolas | Cotos sociales y deportivos, pesca intensiva |
+| Comunidad de Madrid | IDEM · *Zonas sujetas a ordenación* | Vedados y cuencas vedadas | Captura y suelta | Cotos, pesca controlada y experimental |
+| Navarra | IDENA · *Tramos de pesca* | — | — | Cuencas salmonícolas de permiso y tramos salmoneros |
+
+¿Tu comunidad publica sus zonas de pesca como datos abiertos? Añade su servicio en
+`scripts/zonas/normalizar.mjs` (cada capa solo necesita una URL GeoJSON y una función que la
+traduzca al esquema común) y abre un *pull request*.
+
 ## Estructura
 
 ```
@@ -72,7 +99,8 @@ src/
   lib/reglas.js        estimación de especies por cuenca, río, altitud y tipo
   lib/contribuir.js    repositorio, correo y plantillas de aportación
   components/          Navbar, PanelLateral, MapView, PanelInfo, FichaEspecie, Contribuir…
-scripts/               descarga de masas de agua (IGN) y fotos de cebos
+  lib/zonas.js         carga de las zonas de pesca y relación con cada masa de agua
+scripts/               descarga de masas de agua (IGN), zonas de pesca y fotos de cebos
 ```
 
 ## Sobre los datos

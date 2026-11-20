@@ -3,17 +3,29 @@ import MapView from './components/MapView.jsx'
 import { CENTRO, MAPAS_BASE } from './lib/mapas.js'
 import Navbar from './components/Navbar.jsx'
 import PanelLateral from './components/PanelLateral.jsx'
-import PanelInfo from './components/PanelInfo.jsx'
+import PanelInfo, { PanelZona } from './components/PanelInfo.jsx'
 import FichaEspecie from './components/FichaEspecie.jsx'
 import Contribuir from './components/Contribuir.jsx'
 import { PROYECTO } from './lib/contribuir.js'
 import { IcoAportar, IcoAtras, IcoCapas, IcoCerrar, IcoGithub, IcoLista, IcoMapa, IcoMas, IcoMenos, IcoMosca, Logo } from './components/Iconos.jsx'
 import { ESPECIES_POR_ID, ORIGENES } from './data/especies.js'
-import { cargarIndice, idsFiltrados, masaPorId, masasConEspecie, regionesDeMasa, REVISADAS, setGeoRevisadas } from './lib/catalogo.js'
+import { cajaMasa, cargarIndice, idsFiltrados, masaPorId, masasConEspecie, regionesDeMasa, REVISADAS, setGeoRevisadas, todasGeneradas } from './lib/catalogo.js'
 import { dentro, prepararRegion } from './lib/recorte.js'
 import { ubicarLocalidad } from './lib/localidades.js'
+import { cargarZonas, masaDeZona, ORDEN_ZONA, zonasDeMasa } from './lib/zonas.js'
 
 const esMovil = () => window.matchMedia('(max-width: 800px)').matches
+
+const CLAVE_ZONAS = 'dondepica-zonas'
+// tipos de zona visibles en el mapa ('r', 'l', 'c'); '1' es el formato antiguo (todas)
+const leerZonasTipos = () => {
+  try {
+    const v = localStorage.getItem(CLAVE_ZONAS) || ''
+    return new Set(v === '1' ? ORDEN_ZONA : ORDEN_ZONA.filter((k) => v.includes(k)))
+  } catch {
+    return new Set()
+  }
+}
 
 const CLAVE_BIENVENIDA = 'dondepica-bienvenida-vista'
 const bienvenidaVista = () => {
@@ -175,6 +187,19 @@ export default function App() {
   const [infoPlegado, setInfoPlegado] = useState(false)
   const [infoGrande, setInfoGrande] = useState(false)
 
+  // capa de zonas de pesca (refugios, tramos libres o sin muerte y zonas controladas)
+  const [zonasTipos, setZonasTipos] = useState(leerZonasTipos)
+  const zonasActivas = zonasTipos.size > 0
+  const [zonasIdx, setZonasIdx] = useState(undefined) // undefined: sin pedir · null: no hay datos
+  const [estadoZonas, setEstadoZonas] = useState('apagada')
+  const cambiarZonas = useCallback((tiposNuevos) => {
+    setZonasTipos(tiposNuevos)
+    try {
+      localStorage.setItem(CLAVE_ZONAS, ORDEN_ZONA.filter((k) => tiposNuevos.has(k)).join(''))
+    } catch {
+      /* sin almacenamiento */
+    }
+  }, [])
   const [catalogo, setCatalogo] = useState({ total: 0, listo: false })
   const [general, setGeneral] = useState(null)
   const [teselas, setTeselas] = useState(null)
@@ -240,6 +265,22 @@ export default function App() {
     return conEspecie ? base.filter((id) => conEspecie.has(id)).length : base.length
   })()
   const masa = seleccion ? masaPorId(seleccion) : null
+  // el índice de zonas se descarga al activar la capa o al abrir una masa de agua
+  const quiereZonas = zonasActivas || !!masa || (panel && tab === 'zonas')
+  useEffect(() => {
+    if (quiereZonas && zonasIdx === undefined) cargarZonas().then(setZonasIdx)
+  }, [quiereZonas, zonasIdx])
+  const zonasMasa = useMemo(() => (masa && zonasIdx && catalogo.listo ? zonasDeMasa(zonasIdx, masa, cajaMasa(masa)) : []), [masa, zonasIdx, catalogo.listo])
+  const verZona = useCallback(
+    (z) => {
+      if (!zonasTipos.has(z.cat)) cambiarZonas(new Set([...zonasTipos, z.cat]))
+      if (!mapa) return
+      const [w, so, e, n] = z.b
+      const { x } = mapa.getSize()
+      mapa.flyToBounds([[so, w], [n, e]], { paddingTopLeft: [x > 800 && panel ? 400 : 30, 60], paddingBottomRight: [x > 800 ? 460 : 30, 40], maxZoom: 14, duration: 0.8 })
+    },
+    [mapa, panel, cambiarZonas, zonasTipos],
+  )
 
   const [vuelo, setVuelo] = useState(null) // { id, t }: centrar el mapa en una masa elegida en la lista
   const [clicPunto, setClicPunto] = useState(null) // dónde se pulsó la masa seleccionada
@@ -298,6 +339,35 @@ export default function App() {
       mapa.panBy([p.x - objetivo[0], p.y - objetivo[1]], { animate: true, duration: 0.5 })
     },
     [mapa],
+  )
+  // zona de pesca pulsada en el mapa: se abre su masa de agua (o, si no está en el catálogo, la zona sola)
+  const [zonaPulsada, setZonaPulsada] = useState(null) // { z, masaId }
+  const pulsarZona = useCallback(
+    (z, latlng) => {
+      const m = masaDeZona(z, [...REVISADAS, ...todasGeneradas()], cajaMasa)
+      setZonaPulsada({ z, masaId: m?.id || null })
+      setInfoPlegado(false)
+      if (m) clicMapa(m.id, latlng)
+      else {
+        setSeleccion(null)
+        setClicPunto(null)
+      }
+    },
+    [clicMapa],
+  )
+  const zonaAbierta = zonaPulsada && zonaPulsada.masaId && zonaPulsada.masaId === seleccion ? zonaPulsada.z.id : null
+  const zonaSuelta = zonaPulsada && !zonaPulsada.masaId && !seleccion ? zonaPulsada.z : null
+
+  const propsZonas = useMemo(
+    () => ({
+      tipos: zonasTipos,
+      idx: zonasIdx || null,
+      resaltadas: zonaSuelta ? [] : zonasMasa.map((z) => z.id),
+      seleccionada: zonaSuelta?.id || zonaAbierta,
+      onEstado: setEstadoZonas,
+      onZona: pulsarZona,
+    }),
+    [zonasTipos, zonasIdx, zonasMasa, zonaSuelta, zonaAbierta, pulsarZona],
   )
   // mostrar en el mapa dónde vive una especie, sin cambiar la pestaña del panel izquierdo
   const elegirEspecie = useCallback((id) => {
@@ -376,7 +446,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && !ficha && setSeleccion(null)
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || ficha) return
+      setSeleccion(null)
+      setZonaPulsada(null)
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [ficha])
@@ -393,7 +467,7 @@ export default function App() {
         </button>
       )}
 
-      <main className={`escena ${panel ? 'con-panel' : ''} ${masa ? (infoPlegado ? 'con-info info-plegado' : infoGrande ? 'con-info info-grande' : 'con-info') : ''}`}>
+      <main className={`escena ${panel ? 'con-panel' : ''} ${masa || zonaSuelta ? (infoPlegado ? 'con-info info-plegado' : infoGrande ? 'con-info info-grande' : 'con-info') : ''}`}>
         <MapView
           geo={geo}
           filtrados={filtradosMapa}
@@ -411,6 +485,7 @@ export default function App() {
           setMapa={setMapa}
           lugar={lugar && !lugar.error ? lugar : null}
           quitarLugar={() => setLugar(null)}
+          zonas={propsZonas}
         />
 
         {/* botón para abrir el panel izquierdo */}
@@ -444,6 +519,10 @@ export default function App() {
           restablecer={restablecer}
           hayFiltros={hayFiltros}
           reinicio={reinicio}
+          zonasTipos={zonasTipos}
+          setZonasTipos={cambiarZonas}
+          zonasIdx={zonasIdx}
+          estadoZonas={zonasIdx === undefined ? 'cargando' : zonasIdx === null ? 'sin-datos' : estadoZonas}
         />
 
         {volver && !ficha && !(fEsp && fEsp.id === volver) && (
@@ -515,7 +594,10 @@ export default function App() {
             region={region}
             todasRegiones={todasRegiones}
             listaCcaa={listaCcaa}
-            cerrar={() => setSeleccion(null)}
+            cerrar={() => {
+              setSeleccion(null)
+              setZonaPulsada(null)
+            }}
             especie={especie}
             setEspecie={elegirEspecie}
             abrirFicha={setFicha}
@@ -524,6 +606,26 @@ export default function App() {
             grande={infoGrande}
             setGrande={setInfoGrande}
             contribuir={() => setContribuir({ tipo: 'especie-masa', masa: masa.nombre, contexto: `masa ${masa.id}` })}
+            zonas={zonasMasa}
+            zonasIdx={zonasIdx || null}
+            verZona={verZona}
+            contribuirNormativa={() => setContribuir({ tipo: 'normativa', masa: masa.nombre, contexto: `zonas de pesca de la masa ${masa.id}` })}
+            zonaAbierta={zonaAbierta}
+            alAbrirZona={(z) => setZonaPulsada(z ? { z, masaId: masa.id } : null)}
+          />
+        )}
+        {!masa && zonaSuelta && (
+          <PanelZona
+            key={zonaSuelta.id}
+            zona={zonaSuelta}
+            zonasIdx={zonasIdx || null}
+            cerrar={() => setZonaPulsada(null)}
+            plegado={infoPlegado}
+            setPlegado={setInfoPlegado}
+            grande={infoGrande}
+            setGrande={setInfoGrande}
+            verZona={verZona}
+            contribuir={() => setContribuir({ tipo: 'masa', masa: zonaSuelta.rio || zonaSuelta.nom, contexto: `zona de pesca ${zonaSuelta.id} sin masa de agua en el catálogo` })}
           />
         )}
       </main>
